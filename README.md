@@ -1,7 +1,7 @@
 X Rebirth Player Position Mod
 =======================
 
-A mod for X Rebirth that exports the player position at regular intervals.
+A mod for X Rebirth that exports the player position at regular intervals.<br/>
 Created by Tyrant597
 
 
