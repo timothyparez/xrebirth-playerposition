@@ -1,22 +1,26 @@
 <?xml version="1.0" encoding="iso-8859-1"?>
 
+<!-- TODO - Update app with all station location info upon entering a zone. Much easier than parsing a save-file. 
+			Why didn't I think of that earlier. Also think I have to check for highways, think they mess with position coords. -->
 <mdscript name="PlayerPos">
 	<cues>
-		<cue name="startPlayerPos" instantiate="false" namespace="this">
+		<cue name="startPlayerPos" instantiate="false" namespace="this" comment="Loaded when game starts.">
 			<conditions>
 				<check_any>
 					<event_player_created />
 					<event_cue_signalled cue="md.Setup.GameStart" />
 				</check_any>
 			</conditions>
-			<delay exact="1s" />
+			<delay exact="100ms" />
 			<actions>
-				<signal_cue cue="getPos" />
+				<signal_cue cue="interruptPosUpdates" /> <!-- initialize 'loop' -->
+				<signal_cue cue="playerChangedZone" />   <!-- load stations in current zone -->
+				<signal_cue cue="getPos" />				 <!-- start position broadcast 'loop' -->
 				<reset_cue cue="this" />
 			</actions>
 		</cue>
 		
-		<cue name="getPos">
+		<cue name="getPos" comment="Outputs ship position to logfile.">
 			<conditions>
 				<event_cue_signalled />
 			</conditions>
@@ -27,17 +31,113 @@
 			</actions>
 		</cue>
 		
-		<cue name="resetPosCue">
+		<cue name="resetPosCue" comment="Acts to create a loop by resetting 'getPos'.">
 			<conditions>
-				<!--check_value value="not player.platform" /-->
 				<event_cue_signalled />
 			</conditions>	
+			<!-- Modify this value to change time between position updates. Valid values in s or ms. Haven't tested lower values -> performance issues? -->
 			<delay exact="5s" />
 			<actions>
 				<reset_cue cue="this" />
 				<signal_cue cue="getPos" />
 			</actions>
-		</cue>		
+		</cue>
+		
+		<cue name="interruptPosUpdates" comment="Stops position updates, initializes loop.">
+			<conditions>
+				<event_cue_signalled />
+			</conditions>
+			<actions>
+				<!--cancel_cue cue="resetPosCue" /-->
+				<!--cancel_cue cue="getPos" /-->
+				<reset_cue cue="resetPosCue" />
+				<reset_cue cue="getPos" />
+				<reset_cue cue="this" />
+			</actions>
+		</cue>
+		
+		<cue name="playerChangedPlatform" comment="Detects if player is now on his ship or docked in station or docked on an owned ship.">
+			<conditions>
+				<event_object_changed_room object="player.entity" />
+			</conditions>
+			<!-- TODO - See if cutscene affects logic (installed mod skips boarding cutscenes)-->
+			<delay exact="1s" />
+			<actions>
+				<signal_cue cue="interruptPosUpdates" />				
+				<do_if value="player.platform">
+					<!--docked at owned ship -->
+					<do_if value="@player.platform.container.isplayerowned and @player.platform.container.isclass.ship">
+						<show_help force="true"  custom="'docked on owned ship'" />
+						<debug_text text="'player_docked_owned_ship.'" filter="error" />
+						<!-- Resume position updates here? player.platform.parent.position?-->
+					</do_if>
+					<!--docked at station (or npc ship) -->
+					<do_else>
+						<!-- This outputs the name of the station atm, not sure how we can translate from the save-file -->
+						<!-- Would work great with a new game-start thought! =) -->
+						<!-- Also, we can have coordinates/name for the station, the section of the station, or the actual dock. -->
+						<!-- ** In progress - going to load all station info upon entering a new zone. Wont need to parse save-files.(Duh) -->
+						<debug_text text="'player_docked_station: %1, %2'.[player.platform.parent.parent.knownname, player.platform.parent.parent.position]" filter="error"/>
+						<show_help force="true" custom="'docked at station'" />
+					</do_else>
+				</do_if>
+				<!--Undocking -->
+				<do_else>
+					<show_help force="true" custom="'Player undocked'" />
+					<debug_text text="'player_undocked.'" filter="error" />
+					<signal_cue cue="getPos" />
+				</do_else>
+				<reset_cue cue="this" />				
+			</actions>			
+		</cue>
+		
+		<!--cue name="playerDiscStation" comment="triggered when player discovers a new station.(may not use)">
+			<conditions>
+					<event_player_discovered_object />
+					<check_value value="event.param.isclass.station" />  commenting out this line returns ALL station sections 
+			</conditions>	
+			<actions>
+				<show_help force="true" custom="'found: %1'.[event.param.knownname]" />
+				<debug_text text="'player_found: %1, %2'.[event.param.knownname, event.param.position]" filter="error"/>
+				<reset_cue cue="this" />
+			</actions>
+		</cue-->
+		
+		<cue name="playerChangedZone" comment="triggered when the player changes zones. also used to load station info on game-start.">
+			<conditions>
+				<check_any>
+					<event_object_changed_zone object="player.primaryship" />
+					<event_cue_signalled />
+				</check_any>
+			</conditions>
+			<actions>
+				<!--if we are in a highway -->
+				<do_if value="event.param.isclass.highway">
+					<show_help custom="'Vroom Vroom!'" />
+					<signal_cue cue="interruptPosUpdates" />
+				</do_if>
+				<!--load station info -->
+				<do_else>
+					<show_help force="true" custom="'we changed zones!'" />
+					<debug_text text="'player_changed_zone: %1'.[player.zone.knownname]" filter="error" />
+					<include_actions ref="LgetZoneStations" />
+					<signal_cue cue="getPos" />
+				</do_else>
+				<reset_cue cue="this" />
+			</actions>			
+		</cue>
+		
+		<library name="LgetZoneStations">
+			<actions>
+				<find_station name="$lZoneStations" space="player.zone" multiple="true" />
+				<do_all exact="$lZoneStations.count" counter="$ZstationsCounter" >
+					<debug_text text="'zone_station: %1, %2'.[$lZoneStations.{$ZstationsCounter}.knownname, $lZoneStations.{$ZstationsCounter}.position]" filter="error" />
+				</do_all>
+				<remove_value name="$lZoneStations" />
+				<remove_value name="$ZstationsCounter" />
+			</actions>
+		</library>
+				
 	</cues>
 </mdscript>
 
