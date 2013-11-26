@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+
+<mdscript name="PlayerPos">
+	<cues>
+		<cue name="startPlayerPos" instantiate="false" namespace="this">
+			<conditions>
+				<check_any>
+					<event_player_created />
+					<event_cue_signalled cue="md.Setup.GameStart" />
+				</check_any>
+			</conditions>
+			<delay exact="1s" />
+			<actions>
+				<signal_cue cue="getPos" />
+				<reset_cue cue="this" />
+			</actions>
+		</cue>
+		
+		<cue name="getPos">
+			<conditions>
+				<event_cue_signalled />
+			</conditions>
+			<actions>
+				<debug_text text="'Player_Ship_Current: %1'.[player.primaryship.position]" filter="error" />
+				<signal_cue cue="resetPosCue" />
+				<reset_cue cue="this" />
+			</actions>
+		</cue>
+		
+		<cue name="resetPosCue">
+			<conditions>
+				<!--check_value value="not player.platform" /-->
+				<event_cue_signalled />
+			</conditions>	
+			<delay exact="5s" />
+			<actions>
+				<reset_cue cue="this" />
+				<signal_cue cue="getPos" />
+			</actions>
+		</cue>		
+	</cues>
+</mdscript>
+
+

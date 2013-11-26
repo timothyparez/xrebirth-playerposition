@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<content id="PlayerPos" name="PlayerPosition" description="Outputs the player position to the logfile at regular intervals" author="Tyrant597" version="10" date="2013-25-11">
+  <text language="44" name="PlayerPosition" description="Outputs the player position to the logfile at regular intervals" author="Tyrant597" />
+</content>
