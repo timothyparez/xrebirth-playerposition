@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="iso-8859-1"?>
 
-<!-- TODO - Update app with all station location info upon entering a zone. Much easier than parsing a save-file. 
-			Why didn't I think of that earlier. Also think I have to check for highways, think they mess with position coords. -->
+<!-- TODO - 
+			Note: station.parent == zone 
+-->
 <mdscript name="PlayerPos">
 	<cues>
 		<cue name="startPlayerPos" instantiate="false" namespace="this" comment="Loaded when game starts.">
@@ -13,9 +14,10 @@
 			</conditions>
 			<delay exact="100ms" />
 			<actions>
+				<set_value name="global.$playerPos_ship" exact="player.primaryship" />
 				<signal_cue cue="interruptPosUpdates" /> <!-- initialize 'loop' -->
 				<signal_cue cue="playerChangedZone" />   <!-- load stations in current zone -->
-				<!--signal_cue cue="getPos" /-->				 <!-- start position broadcast 'loop' -->
+				<!--signal_cue cue="getPos" /-->		 <!-- start position broadcast 'loop' (called by playerChangedZone)-->
 				<reset_cue cue="this" />
 			</actions>
 		</cue>
@@ -25,7 +27,7 @@
 				<event_cue_signalled />
 			</conditions>
 			<actions>
-				<debug_text text="'Player_Ship_Current: %1'.[player.primaryship.position]" filter="error" />
+				<debug_text text="'Player_Ship_Current: %1'.[global.$playerPos_ship.position]" filter="error" />
 				<signal_cue cue="resetPosCue" />
 				<reset_cue cue="this" />
 			</actions>
@@ -35,7 +37,7 @@
 			<conditions>
 				<event_cue_signalled />
 			</conditions>	
-			<!-- Modify this value to change time between position updates. Valid values in s or ms. Haven't tested lower values -> performance issues? -->
+			<!-- Modify this value to change time between position updates. Valid values in s or ms. Haven't tested values lower than 1s -> performance issues? -->
 			<delay exact="5s" />
 			<actions>
 				<reset_cue cue="this" />
@@ -48,44 +50,64 @@
 				<event_cue_signalled />
 			</conditions>
 			<actions>
-				<!--cancel_cue cue="resetPosCue" /-->
-				<!--cancel_cue cue="getPos" /-->
 				<reset_cue cue="resetPosCue" />
 				<reset_cue cue="getPos" />
 				<reset_cue cue="this" />
 			</actions>
 		</cue>
 		
-		<cue name="playerChangedPlatform" comment="Detects if player is now on his ship or docked in station or docked on an owned ship.">
+		<cue name="posPlayerDocked" comment="triggered when player docks at station or ship" >
+			<conditions>
+				<event_object_docked object="player.primaryship" />
+			</conditions>
+			<actions>
+				<!-- docked at npc or owned ship? -->
+				<do_if value="event.param.isclass.ship">
+					<set_value name="global.$playerPos_ship" exact="event.param" />
+					<do_if value="event.param.isplayerowned">			
+						<show_help force="true"  custom="'docked on owned ship'" />
+						<debug_text text="'player_docked_owned_ship: %1'.[event.param.knownname]" filter="error" />
+					</do_if>
+					<do_else>
+						<show_help force="true"  custom="'docked on npc ship'" />
+						<debug_text text="'player_docked_ship: %1'.[event.param.knownname]" filter="error" />
+					</do_else>
+				</do_if>
+				<!-- docked at station -->
+				<do_else>
+					<signal_cue cue="interruptPosUpdates" />
+					<debug_text text="'player_docked_station: %1, %2'.[event.param.knownname, event.param.position]" filter="error" />
+					<show_help force="true" custom="'docked at station'" />
+				</do_else>
+				<reset_cue cue="this" />
+			</actions>
+		</cue>
+		
+		<cue name="posPlayerUndocked" comment="triggered when player undocks" >
+			<conditions>
+				<event_object_undocked object="player.primaryship" />
+			</conditions>
+			<!-- No need to broadcast zone, unable to save while docked. -->
+			<actions>
+				<set_value name="global.$playerPos_ship" exact="player.primaryship" />
+				<show_help force="true" custom="'Player undocked'" />
+				<debug_text text="'player_undocked.'" filter="error" />
+				<signal_cue cue="getPos" />
+				<reset_cue cue="this" />
+			</actions>
+		</cue>
+		
+		<!--cue name="posPlayerChangedRoom">
 			<conditions>
 				<event_object_changed_room object="player.entity" />
 			</conditions>
-			<delay exact="1s" />
-			<actions>			
-				<do_if value="player.platform">
-					<signal_cue cue="interruptPosUpdates" />
-					<!--docked at owned ship -->
-					<do_if value="@player.platform.container.isplayerowned and @player.platform.container.isclass.ship">
-						
-						<show_help force="true"  custom="'docked on owned ship'" />
-						<debug_text text="'player_docked_owned_ship.'" filter="error" />
-						<!-- Resume position updates here? player.platform.parent.position?-->
-					</do_if>
-					<!--docked at station (or npc ship) -->
-					<do_else>
-						<debug_text text="'player_docked_station: %1, %2'.[player.platform.parent.parent.knownname, player.platform.parent.parent.position]" filter="error"/>
-						<show_help force="true" custom="'docked at station'" />
-					</do_else>
+			<actions>
+				<do_if value="player.ship == player.primaryship and not event.param2.isclass.dockingbay">
+					<show_help force="true" custom="'just moving around ship'" />
 				</do_if>
-				<!--Undocking -->
-				<do_else>
-					<show_help force="true" custom="'Player undocked'" />
-					<debug_text text="'player_undocked.'" filter="error" />
-					<signal_cue cue="getPos" />
-				</do_else>
-				<reset_cue cue="this" />				
-			</actions>			
-		</cue>
+				<reset_cue cue="this" />
+			</actions>
+		</cue-->
 		
 		<!--cue name="playerDiscStation" comment="triggered when player discovers a new station.(may not use)">
 			<conditions>
@@ -106,13 +128,15 @@
 					<event_cue_signalled />
 				</check_any>
 			</conditions>
+			<delay exact="500ms" />
 			<actions>
 				<!--if we are in a highway -->
 				<do_if value="event.param.isclass.highway">
+					<debug_text text="'player_highway.'" filter="error" />
 					<show_help custom="'Vroom Vroom!'" />
 					<signal_cue cue="interruptPosUpdates" />
 				</do_if>
-				<!--load station info -->
+				<!--load station info zonewide -->
 				<do_else>
 					<show_help force="true" custom="'we changed zones!'" />
 					<debug_text text="'player_changed_zone: %1'.[player.zone.knownname]" filter="error" />
